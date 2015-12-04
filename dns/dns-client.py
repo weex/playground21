@@ -61,10 +61,11 @@ def cmd_domains(ctx):
 
 @click.command(name='register')
 @click.argument('name')
+@click.argument('domain')
 @click.argument('days')
 @click.argument('recordlist', nargs=-1)
 @click.pass_context
-def cmd_register(ctx, name, days, recordlist):
+def cmd_register(ctx, name, domain, days, recordlist):
 
     pubkey = wallet.get_message_signing_public_key()
     addr = pubkey.address()
@@ -82,6 +83,7 @@ def cmd_register(ctx, name, days, recordlist):
 
     req_obj = {
         'name': name,
+        'domain': domain,
         'days': int(days),
         'pkh': addr,
         'hosts': records,
@@ -93,14 +95,27 @@ def cmd_register(ctx, name, days, recordlist):
     answer = requests.post(url=sel_url.format(), headers=headers, data=body)
     print(answer.text)
 
+@click.command(name='simpleregister')
+@click.argument('name')
+@click.argument('domain')
+@click.argument('days')
+@click.argument('ipaddress')
+@click.pass_context
+def cmd_simpleRegister(ctx, name, domain, days, ipaddress):
+    sel_url = ctx.obj['endpoint'] + 'dns/1/simpleRegister?name={0}&domain={1}&days={2}&ip={3}'
+    answer = requests.get(url=sel_url.format(name, domain, days, ipaddress))
+    print(answer.text)
+
 @click.command(name='update')
 @click.argument('name')
+@click.argument('domain')
 @click.argument('pkh')
 @click.argument('records', nargs=-1)
 @click.pass_context
-def cmd_update(ctx, name, pkh, records):
+def cmd_update(ctx, name, domain, pkh, records):
     req_obj = {
         'name': name,
+        'domain': domain,
         'hosts': [],
     }
     for record in records:
@@ -119,7 +134,7 @@ def cmd_update(ctx, name, pkh, records):
         print("Cannot self-verify message")
         sys.exit(1)
 
-    sel_url = ctx.obj['endpoint'] + 'dns/1/host.update'
+    sel_url = ctx.obj['endpoint'] + 'dns/1/records.update'
     headers = {
         'Content-Type': 'application/json',
         'X-Bitcoin-Sig': sig_str,
@@ -129,11 +144,13 @@ def cmd_update(ctx, name, pkh, records):
 
 @click.command(name='delete')
 @click.argument('name')
+@click.argument('domain')
 @click.argument('pkh')
 @click.pass_context
-def cmd_delete(ctx, name, pkh):
+def cmd_delete(ctx, name, domain, pkh):
     req_obj = {
         'name': name,
+        'domain': domain,
         'pkh': pkh
     }
 
@@ -154,6 +171,7 @@ def cmd_delete(ctx, name, pkh):
 main.add_command(cmd_info)
 main.add_command(cmd_domains)
 main.add_command(cmd_register)
+main.add_command(cmd_simpleRegister)
 main.add_command(cmd_update)
 main.add_command(cmd_delete)
 

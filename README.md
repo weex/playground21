@@ -17,4 +17,5 @@ Incomplete works-in-progress
 ----------------------------
 * signing: Bitcoin transaction signing server
 * stegano: Steganography server
+* **turk**: Mechanical Turk (status: 98% there)
 
