@@ -22,6 +22,99 @@ def buy(args):
     else:
         print(answer.text)
 
+# store and read back a piece of data, reporting failure if it didn't work
+# also create a directory of those files and store that as a file, writing it to a text file
+def sync(args):
+    '''Uploads and checks files we want stored on a single causeway server'''
+    # read through a directory of files and store each one under a random hash, save hashes+filenames
+    # to a local sqlite db.
+                 
+    # check if we have a local db and if not create it
+    con = sqlite3.connect('local.db')
+    con.execute("create table files (filename text primary key, filehash text)")
+    con.execute("create table placement (id integer primary key, filename text, url text, \
+                                    remote_filename text, verified integer)")
+
+    check = []
+    upload = []
+    listing = glob.glob(os.path.join(args.path, "*.json"))
+    for l in listing:  
+        # check if file is in local key db
+        row = con.execute("select * from files where filename = ?", (l,))
+        filehash = hashlib.sha256(open(l, 'r').read()).hexdigest()
+        if row is None:
+            con.execute("insert into files (filename, filehash) VALUES (?, ?)", (l,filehash))
+            # for new files, we'll upload them
+            upload.append({'name': l})
+        else:
+            # for existing files, download and verify them
+            check.append(('name':row['filename'], 'filehash':row['filehash']})
+
+    # now that we know what we need to check and upload let's do the checking first, any that 
+    # come back wrong can be added to the upload queue.
+    # download each value (later a hash only with some full downloads for verification)
+    for f in check:
+        value = open(f['name'], 'r')
+        data = value.read()
+        value.close()
+        if len(data) > 8192:
+            raise ValueError('File is too big. 8192 bytes should be enough for anyone.')
+        else:
+            # handle changes on our side, to update or replace local files?
+            row = con.execute("select * from placement inner join files on files.filename = placement.filename\
+                                    where placement.filename = ?", (f['name']))
+            if row is None:
+                upload.append({'name': l})
+            else:
+                for r in row:
+                    # download value, hash and check its hash
+                    remote_name = row['remote_filename']
+                    sel_url = "{0}get?key={1}"
+                    answer = requests.get(url=sel_url.format(args.url, remote_filename))
+                    filehash = hashlib.sha256(answer.text).hexdigest()
+                    if status_code == 404: 
+                        # log not found error, add to upload
+                    elif filehash != r['filehash']:
+                        # log wrong error, add to upload
+                    else:
+                        #update verified
+                    # cases we need to handle, doesn't exist, exists but wrong, correct
+
+    failed = []
+    for f in upload:
+        value = open(f['name'], 'r')
+        data = value.read()
+        value.close()
+
+        if len(data) > 8192:
+            raise ValueError('File is too big. 8192 bytes should be enough for anyone.')
+        else:
+            a = ''
+            setattr(a, 'key', remote_name)
+            setattr(a, 'value', data)
+            setattr(a, 'nonce', args.nonce)
+            res = json.loads(put(args))
+            if 'result' not in res or res['result'] != 'success':
+                # houston we have a problem
+                failed.append(f['name'])
+    
+    for f in upload:
+        row = con.execute("select * from placement where filename = ?", (l,))
+        if row is None:
+            upload.append({'name': l})
+            con.execute("insert into placement (filename, url) values (?, ?)", (l, args.url))
+
+                remote_filename = ''.join(random.SystemRandom().choice(string.ascii_uppercase \
+                                        + string.digits) for _ in range(32)))
+                row2 = con.execute("insert into placement (filename, url, remote_filename) \
+                                        values (?, ?, ?)", (f['name'], args.url, remote_filename,))
+
+    # if not, generate its hash and create a local record
+    # for each placement of the file, we generate a random name for it and create a 'placement' record for it
+    #   which includes the proposed url to place it. 
+    # then place the file
+    # after placement, retrieve it and update the verified time
+
 def put(args):
     primary_address = wallet.get_payout_address()
     message = args.key + args.value + primary_address + args.nonce
