@@ -37,6 +37,10 @@ def sync(args):
 
     check = []
     upload = []
+    succeeded = []
+    failed = []
+    verified = []
+
     listing = glob.glob(os.path.join(args.path, "*.json"))
     for l in listing:  
         # check if file is in local key db
@@ -73,47 +77,47 @@ def sync(args):
                     answer = requests.get(url=sel_url.format(args.url, remote_filename))
                     filehash = hashlib.sha256(answer.text).hexdigest()
                     if status_code == 404: 
-                        # log not found error, add to upload
+                        # log not found error in db, add to upload
+                        log(f['name'], args.url, "key not found")
+                        upload.append(f['name'])
                     elif filehash != r['filehash']:
                         # log wrong error, add to upload
+                        upload.append(f['name'])
+                        log(f['name'], args.url, "incorrect hash")
                     else:
                         #update verified
-                    # cases we need to handle, doesn't exist, exists but wrong, correct
+                        verified.append(f['name'])
 
     failed = []
+    succeeded = []
     for f in upload:
         value = open(f['name'], 'r')
         data = value.read()
         value.close()
+        remote_filename = ''.join(random.SystemRandom().choice(string.ascii_uppercase \
+                                + string.digits) for _ in range(32)))
 
         if len(data) > 8192:
             raise ValueError('File is too big. 8192 bytes should be enough for anyone.')
         else:
             a = ''
-            setattr(a, 'key', remote_name)
+            setattr(a, 'key', remote_filename)
             setattr(a, 'value', data)
             setattr(a, 'nonce', args.nonce)
-            res = json.loads(put(args))
+            res = json.loads(put(a))
             if 'result' not in res or res['result'] != 'success':
                 # houston we have a problem
+                log(f['name'], args.url, 'upload failed')
                 failed.append(f['name'])
-    
-    for f in upload:
+            else:
+                succeeded.append({'name': f['name'], 'remote_filename': remote_filename})
+                log(f['name'], args.url, 'upload succeeded')
+
+    for f in succeeded:
         row = con.execute("select * from placement where filename = ?", (l,))
         if row is None:
-            upload.append({'name': l})
-            con.execute("insert into placement (filename, url) values (?, ?)", (l, args.url))
-
-                remote_filename = ''.join(random.SystemRandom().choice(string.ascii_uppercase \
-                                        + string.digits) for _ in range(32)))
-                row2 = con.execute("insert into placement (filename, url, remote_filename) \
-                                        values (?, ?, ?)", (f['name'], args.url, remote_filename,))
-
-    # if not, generate its hash and create a local record
-    # for each placement of the file, we generate a random name for it and create a 'placement' record for it
-    #   which includes the proposed url to place it. 
-    # then place the file
-    # after placement, retrieve it and update the verified time
+            con.execute("insert into placement (filename, remote_filename, url) values (?, ?)", \
+                            (f['name'], f['remote_filename'], args.url))
 
 def put(args):
     primary_address = wallet.get_payout_address()
@@ -214,6 +218,12 @@ if __name__ == '__main__':
     #parser_buy.add_argument('address', help='Address used as username for the service.')  
     parser_buy.add_argument('contact', help='Email address to contact on expiration.')  
     parser_buy.set_defaults(func=buy)
+
+    parser_sync = subparsers.add_parser('sync', help="Download the value stored with a key")
+    parser_sync.add_argument('url', help='Url of the Causeway server with trailing slash.')  
+    parser_sync.add_argument('path', help='Full path of folder to sync')  
+    parser_sync.add_argument('nonce', help='Nonce for signature uniqueness.')  
+    parser_sync.set_defaults(func=sync)
 
     parser_put = subparsers.add_parser('put', help="Set or update a value for a key")
     parser_put.add_argument('url', help='Url of the Causeway server with trailing slash.')  
